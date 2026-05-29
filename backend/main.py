@@ -2,6 +2,11 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 import shutil
 import subprocess
 from pathlib import Path
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -18,6 +23,7 @@ def root():
 
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
+    logger.info("upload started")
     filename = Path(file.filename).name
 
     if not filename.lower().endswith((".mp3", ".wav")):
@@ -37,6 +43,7 @@ async def upload_file(file: UploadFile = File(...)):
     except OSError as exc:
         raise HTTPException(status_code=500, detail=f"Failed to save uploaded file: {exc}") from exc
 
+    logger.info("running demucs")
     try:
         subprocess.run(
             ["demucs", "-o", str(OUTPUT_DIR), str(file_path)],
@@ -57,6 +64,7 @@ async def upload_file(file: UploadFile = File(...)):
     if not vocals_path.exists():
         raise HTTPException(status_code=500, detail="Demucs completed but vocals output was not found.")
         
+    logger.info("separation completed")
     # 5. Simplify API response to standard JSON mapping, using .as_posix() 
     return {
         "success": True,
