@@ -12,6 +12,10 @@ def verify():
         # Initializing without specifying amodel ensures it matches the default loaded checkpoint ('HTSAT-tiny' or 'HTSAT-base' depending on laion-clap defaults)
         model = laion_clap.CLAP_Module(enable_fusion=False, amodel='HTSAT-tiny')
         model.load_ckpt() # Automatically downloads the default checkpoint
+        # Evaluation mode disables training-time layers such as dropout, improving
+        # consistency for repeated inference checks.
+        model.eval()
+        print("Model loaded in evaluation mode")
         print("CLAP model correctly loaded.")
     except Exception as e:
         print(f"Failed to load CLAP: {e}")

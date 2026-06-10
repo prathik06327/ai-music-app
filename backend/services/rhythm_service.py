@@ -44,8 +44,8 @@ def compare_rhythm(reference_onsets: np.ndarray, user_onsets: np.ndarray) -> dic
     Compares reference and user onset times to calculate timing differences 
     and produce an MVP rhythm score.
 
-    This uses a basic alignment procedure by zipping the arrays up to the 
-    shortest length between them.
+    This uses Dynamic Time Warping (DTW) to properly match user notes with 
+    reference notes even if one track has extra or missing onsets.
 
     Args:
         reference_onsets (np.ndarray): The reference onset times in seconds.
@@ -54,19 +54,24 @@ def compare_rhythm(reference_onsets: np.ndarray, user_onsets: np.ndarray) -> dic
     Returns:
         dict: A dictionary containing 'average_timing_difference' and 'rhythm_score'.
     """
-    min_length = min(len(reference_onsets), len(user_onsets))
-    
-    if min_length == 0:
+    if len(reference_onsets) == 0 or len(user_onsets) == 0:
         return {
             "average_timing_difference": 0.0,
             "rhythm_score": 0.0
         }
         
-    reference_trimmed = reference_onsets[:min_length]
-    user_trimmed = user_onsets[:min_length]
+    # Use Dynamic Time Warping (DTW) to align the onsets
+    D, wp = librosa.sequence.dtw(X=reference_onsets, Y=user_onsets)
+    wp_chronological = wp[::-1]
+    
+    ref_indices = wp_chronological[:, 0]
+    user_indices = wp_chronological[:, 1]
+    
+    aligned_reference = reference_onsets[ref_indices]
+    aligned_user = user_onsets[user_indices]
     
     # Calculate average timing difference in seconds
-    timing_differences = np.abs(reference_trimmed - user_trimmed)
+    timing_differences = np.abs(aligned_reference - aligned_user)
     average_timing_difference = float(np.mean(timing_differences))
     
     # Simple MVP rhythm scoring approach:

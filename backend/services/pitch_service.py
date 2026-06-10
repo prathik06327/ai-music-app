@@ -10,9 +10,33 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import torch
 import torchcrepe
+import logging
 from pathlib import Path
 from services.audio_service import load_audio
 from services.alignment_service import align_pitch_contours
+
+logger = logging.getLogger(__name__)
+
+
+def _ensure_torchcrepe_eval_mode(device: str, model_capacity: str) -> None:
+    """
+    Loads the TorchCREPE model if needed and keeps it in evaluation mode.
+
+    TorchCREPE's loader already calls eval(), but doing it explicitly here documents
+    the inference contract for this service and protects us if the cached model is
+    ever replaced or toggled back to training mode.
+    """
+    if (
+        not hasattr(torchcrepe.infer, "model")
+        or not hasattr(torchcrepe.infer, "capacity")
+        or torchcrepe.infer.capacity != model_capacity
+    ):
+        torchcrepe.load.model(device, model_capacity)
+
+    # Evaluation mode disables training-time behavior such as dropout/batch-stat
+    # updates, improving repeatability for the same audio input.
+    torchcrepe.infer.model.eval()
+    logger.info("Model loaded in evaluation mode")
 
 
 def extract_pitch(audio_path: str) -> np.ndarray:
@@ -68,19 +92,25 @@ def extract_pitch(audio_path: str) -> np.ndarray:
     
     # Prediction model: 'full' is highly accurate but slightly slower than 'tiny'.
     model_capacity = "tiny"
+    device = 'cpu'
 
     # Step 5: Run Pitch Prediction
     try:
+        _ensure_torchcrepe_eval_mode(device, model_capacity)
+        logger.info("Running inference with torch.no_grad()")
         # We instruct TorchCREPE to analyze our tensor frame-by-frame and return the dominant pitches.
-        pitch_tensor = torchcrepe.predict(
-            audio=audio_tensor,
-            sample_rate=sample_rate,
-            hop_length=hop_length,
-            fmin=fmin,
-            fmax=fmax,
-            model=model_capacity,
-            device='cpu' # Run on standard CPU to ensure maximum compatibility
-        )
+        # no_grad avoids building a training graph during inference, reducing memory
+        # use and helping keep repeated analysis runs more consistent and faster.
+        with torch.no_grad():
+            pitch_tensor = torchcrepe.predict(
+                audio=audio_tensor,
+                sample_rate=sample_rate,
+                hop_length=hop_length,
+                fmin=fmin,
+                fmax=fmax,
+                model=model_capacity,
+                device=device # Run on standard CPU to ensure maximum compatibility
+            )
     except Exception as e:
         raise RuntimeError(f"TorchCREPE failed to predict pitch: {e}") from e
 
@@ -117,6 +147,13 @@ def compare_pitch_contours(reference_pitch: np.ndarray, user_pitch: np.ndarray) 
     """
     if len(reference_pitch) == 0 or len(user_pitch) == 0:
         raise ValueError("Cannot compare empty pitch contours.")
+
+    if reference_pitch.shape == user_pitch.shape and np.allclose(reference_pitch, user_pitch, rtol=1e-6, atol=1e-6):
+        return {
+            "average_difference": 0.0,
+            "max_difference": 0.0,
+            "min_difference": 0.0,
+        }
 
     # 1. Align the contours using DTW
     aligned_reference, aligned_user = align_pitch_contours(reference_pitch, user_pitch)
