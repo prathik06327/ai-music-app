@@ -7,7 +7,7 @@ def main():
     Validation script to verify the CLAP audio embedding pipeline.
     It loads an audio file, extracts the semantic embedding, and prints basic statistics.
     """
-    audio_file = "outputs/htdemucs/song/vocals.wav"
+    audio_file = "outputs/htdemucs/compare-4bdc1d8f/vocals.wav"
     
     try:
         print(f"Extracting CLAP embedding from '{audio_file}'... (This may take a moment based on your CPU)")

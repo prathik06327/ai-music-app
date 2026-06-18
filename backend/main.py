@@ -24,6 +24,12 @@ from services.timbre_service import (
     compare_embeddings,
     calculate_timbre_score
 )
+from services.melody_service import analyze_melody_similarity
+from services.dynamics_service import analyze_dynamics
+from services.stability_service import analyze_vocal_stability
+from services.pronunciation_service import analyze_pronunciation_accuracy
+from services.range_service import analyze_vocal_range
+from services.harmonic_service import analyze_harmonic_similarity
 from services.feedback_service import generate_feedback
 
 # Configure logging
@@ -201,53 +207,67 @@ def calculate_overall_score(
     pitch_score: float,
     rhythm_score: float,
     tempo_score: float,
-    timbre_score: float
+    timbre_score: float,
+    melody_score: float | None = None,
+    dynamics_score: float | None = None,
+    stability_score: float | None = None,
+    pronunciation_score: float | None = None,
+    range_score: float | None = None,
+    harmonic_score: float | None = None,
 ) -> float:
     """
     Calculates the overall performance score using a weighted system.
 
-    Weighting System:
-    - Pitch (50%): The most critical component of singing. Adjusting and hitting the correct notes.
-    - Rhythm (25%): Timing and hitting notes at the correct time (onsets).
-    - Tempo (10%): Overall speed consistency.
-    - Timbre (15%): Tone, style, and texture consistency compared to the reference track.
-
-    Args:
-        pitch_score (float): Score between 0 and 100
-        rhythm_score (float): Score between 0 and 100
-        tempo_score (float): Score between 0 and 100
-        timbre_score (float): Score between 0 and 100
-
-    Returns:
-        float: The calculated overall score rounded to 2 decimal places.
+    Backward compatibility:
+    If only the original four scores are supplied, the previous weighting system
+    is used. When the newer analysis scores are supplied, the expanded scoring
+    model includes all ten dimensions.
     """
-    # 1. Validate all input scores are between 0 and 100
-    for name, s in [('pitch', pitch_score), ('rhythm', rhythm_score), ('tempo', tempo_score), ('timbre', timbre_score)]:
-        if not (0 <= s <= 100):
-            logger.warning(f"Invalid score for {name}: {s}. Clamping for calculation.")
+    def _clamp_score(name: str, score: float) -> float:
+        if not (0 <= score <= 100):
+            logger.warning("Invalid score for %s: %s. Clamping for calculation.", name, score)
+        return max(0.0, min(100.0, float(score)))
 
-    # Calculate weighted contributions
-    pitch_contribution = max(0.0, min(100.0, pitch_score)) * 0.50
-    rhythm_contribution = max(0.0, min(100.0, rhythm_score)) * 0.25
-    tempo_contribution = max(0.0, min(100.0, tempo_score)) * 0.10
-    timbre_contribution = max(0.0, min(100.0, timbre_score)) * 0.15
+    new_scores = {
+        "melody": melody_score,
+        "dynamics": dynamics_score,
+        "stability": stability_score,
+        "pronunciation": pronunciation_score,
+        "range": range_score,
+        "harmonic": harmonic_score,
+    }
 
-    overall_score = pitch_contribution + rhythm_contribution + tempo_contribution + timbre_contribution
+    if all(score is None for score in new_scores.values()):
+        score_weights = {
+            "pitch": (pitch_score, 0.50),
+            "rhythm": (rhythm_score, 0.25),
+            "tempo": (tempo_score, 0.10),
+            "timbre": (timbre_score, 0.15),
+        }
+        logger.info("Using legacy four-metric overall scoring weights.")
+    else:
+        score_weights = {
+            "pitch": (pitch_score, 0.30),
+            "rhythm": (rhythm_score, 0.15),
+            "tempo": (tempo_score, 0.08),
+            "timbre": (timbre_score, 0.10),
+            "melody": (melody_score or 0.0, 0.12),
+            "dynamics": (dynamics_score or 0.0, 0.07),
+            "stability": (stability_score or 0.0, 0.06),
+            "pronunciation": (pronunciation_score or 0.0, 0.07),
+            "range": (range_score or 0.0, 0.03),
+            "harmonic": (harmonic_score or 0.0, 0.02),
+        }
+        logger.info("Using expanded ten-metric overall scoring weights.")
 
-    # Log individual contributions
-    logger.info(f"Pitch contribution: {pitch_contribution}")
-    logger.info(f"Rhythm contribution: {rhythm_contribution}")
-    logger.info(f"Tempo contribution: {tempo_contribution}")
-    logger.info(f"Timbre contribution: {timbre_contribution}")
-    logger.info(f"Final original score (raw): {overall_score}")
+    overall_score = 0.0
+    for name, (score, weight) in score_weights.items():
+        contribution = _clamp_score(name, score) * weight
+        overall_score += contribution
+        logger.info("%s contribution: %.4f", name.title(), contribution)
 
-    # 2. Clamp final result between 0 and 100
-    overall_score = max(0.0, min(100.0, overall_score))
-
-    # 3. Round final score to 2 decimal places
-    overall_score = round(overall_score, 2)
-
-    logger.info(f"Final overall score (clamped & rounded): {overall_score}")
+    overall_score = round(max(0.0, min(100.0, overall_score)), 2)
+    logger.info("Final overall score (clamped & rounded): %.2f", overall_score)
 
     return overall_score
 
@@ -322,13 +342,52 @@ def analyze_performance(request: PerformanceAnalysisRequest):
         timbre_comparison = compare_embeddings(reference_embedding, user_embedding)
         timbre_score = calculate_timbre_score(timbre_comparison.get("similarity", 0.0))
 
+        # --- Melody Analysis ---
+        logger.info("Running melody similarity analysis...")
+        melody_result = analyze_melody_similarity(reference_path.as_posix(), user_path.as_posix())
+        melody_score = melody_result["melody_score"]
+
+        # --- Dynamics Analysis ---
+        logger.info("Running dynamics analysis...")
+        dynamics_result = analyze_dynamics(reference_path.as_posix(), user_path.as_posix())
+        dynamics_score = dynamics_result["dynamics_score"]
+
+        # --- Stability Analysis ---
+        logger.info("Running vocal stability analysis...")
+        stability_result = analyze_vocal_stability(reference_path.as_posix(), user_path.as_posix())
+        logger.info(f"Stability Result: {stability_result}")
+        stability_score = stability_result["stability_score"]
+
+        # --- Pronunciation Analysis ---
+        logger.info("Running pronunciation accuracy analysis...")
+        pronunciation_result = analyze_pronunciation_accuracy(reference_path.as_posix(), user_path.as_posix())
+        logger.info(f"Pronunciation Result: {pronunciation_result}")
+        pronunciation_score = pronunciation_result["pronunciation_score"]
+
+        # --- Range Analysis ---
+        logger.info("Running vocal range analysis...")
+        range_result = analyze_vocal_range(reference_path.as_posix(), user_path.as_posix())
+        logger.info(f"Range Result: {range_result}")
+        range_score = range_result["range_score"]
+
+        # --- Harmonic Analysis ---
+        logger.info("Running harmonic similarity analysis...")
+        harmonic_result = analyze_harmonic_similarity(reference_path.as_posix(), user_path.as_posix())
+        harmonic_score = harmonic_result["harmonic_score"]
+
         # --- Overall Score ---
         logger.info("Calculating overall score...")
         overall_score = calculate_overall_score(
             pitch_score=pitch_score,
             rhythm_score=rhythm_score,
             tempo_score=tempo_score,
-            timbre_score=timbre_score
+            timbre_score=timbre_score,
+            melody_score=melody_score,
+            dynamics_score=dynamics_score,
+            stability_score=stability_score,
+            pronunciation_score=pronunciation_score,
+            range_score=range_score,
+            harmonic_score=harmonic_score,
         )
         
     except ValueError as exc:
@@ -341,13 +400,21 @@ def analyze_performance(request: PerformanceAnalysisRequest):
         logger.error(f"Unexpected error during analysis: {exc}")
         raise HTTPException(status_code=500, detail=f"Unexpected error: {exc}") from exc
 
-    return {
+    response_payload = {
         "pitch_score": float(pitch_score),
         "rhythm_score": float(rhythm_score),
         "tempo_score": float(tempo_score),
         "timbre_score": float(timbre_score),
+        "melody_score": float(melody_score),
+        "dynamics_score": float(dynamics_score),
+        "stability_score": float(stability_score),
+        "pronunciation_score": float(pronunciation_score),
+        "range_score": float(range_score),
+        "harmonic_score": float(harmonic_score),
         "overall_score": float(overall_score)
     }
+    logger.info(f"Analysis response payload: {response_payload}")
+    return response_payload
 
 
 @app.post("/generate-feedback")

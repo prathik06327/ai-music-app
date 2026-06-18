@@ -4,19 +4,21 @@ import GlassCard from "./components/ui/GlassCard";
 
 export default function Home() {
   return (
-    <PageContainer className="flex min-h-[calc(100vh-56px)] items-center justify-center">
-      <div className="w-full max-w-3xl">
-        <GlassCard className="p-8 text-center text-white sm:p-10">
-          <div className="mx-auto max-w-2xl space-y-5">
-            <p className="text-sm uppercase tracking-[0.3em] text-white/55">AI Music Analysis Prototype</p>
-            <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">Upload, analyze, and review vocal performance.</h1>
-            <p className="mx-auto max-w-xl text-sm leading-7 text-slate-200 sm:text-base">
-              Compare a reference vocal against a user recording, then optionally generate AI feedback after scoring.
+    <PageContainer className="flex min-h-[calc(100vh-120px)] items-center justify-center py-12">
+      <div className="w-full max-w-2xl">
+        <GlassCard className="p-8 text-center text-white sm:p-12">
+          <div className="mx-auto max-w-xl space-y-6">
+            <p className="text-xs uppercase tracking-[0.3em] text-white/50">Vocal Assessment Tool</p>
+            <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl text-white">
+              AI Music Performance Analyzer
+            </h1>
+            <p className="mx-auto text-sm leading-relaxed text-slate-300 sm:text-base">
+              Upload a reference recording and a performance recording. The system analyzes vocals using machine learning models and generates performance scores.
             </p>
-            <div className="pt-2">
+            <div className="pt-4">
               <Link
                 href="/analyze"
-                className="inline-flex items-center justify-center rounded-full bg-white px-6 py-3 text-sm font-semibold text-slate-950 transition-colors hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-white/60"
+                className="inline-flex items-center justify-center rounded-full bg-white px-8 py-3 text-sm font-semibold text-slate-950 transition-all hover:bg-slate-200 hover:scale-[1.03] focus:outline-none focus:ring-2 focus:ring-white/60 active:scale-[0.98] duration-150 cursor-pointer shadow-lg"
               >
                 Start Analysis
               </Link>

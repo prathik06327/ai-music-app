@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import StatusBadge from "./components/StatusBadge";
+import StatusBadge from "./components/ui/StatusBadge";
 import Threads from "./components/background/Threads";
 
 const geistSans = Geist({

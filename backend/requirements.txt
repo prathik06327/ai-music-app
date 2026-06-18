@@ -13,3 +13,5 @@ laion-clap
 torchvision
 transformers
 huggingface_hub
+openai-whisper
+rapidfuzz
