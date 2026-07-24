@@ -7,6 +7,10 @@ from services.pitch_service import extract_pitch
 logger = logging.getLogger(__name__)
 
 
+def _final_score(score: float) -> int:
+    return max(0, min(100, int(round(score))))
+
+
 def _sanitize_pitch(pitch_contour: np.ndarray) -> np.ndarray:
     """
     Removes silent or invalid frames before calculating vocal range.
@@ -85,14 +89,14 @@ def analyze_vocal_range(reference_audio_path: str, user_audio_path: str) -> dict
     logger.info("Calculating user vocal range")
     user_range = _calculate_range_width(user_clean)
 
-    range_score = _calculate_range_score(reference_range, user_range)
+    range_score = _final_score(_calculate_range_score(reference_range, user_range))
 
     logger.info("Reference range: %.2f Hz", reference_range)
     logger.info("User range: %.2f Hz", user_range)
     logger.info("Range score: %.2f", range_score)
 
     return {
-        "range_score": float(range_score),
+        "range_score": range_score,
         "reference_range": float(reference_range),
         "user_range": float(user_range),
     }

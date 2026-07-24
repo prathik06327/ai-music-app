@@ -2,6 +2,11 @@ import librosa
 import numpy as np
 from services.audio_service import load_audio
 
+
+def _final_score(score: float) -> int:
+    return max(0, min(100, int(round(score))))
+
+
 def extract_onsets(audio_path: str) -> np.ndarray:
     """
     Extracts note onset times from an audio file.
@@ -57,7 +62,7 @@ def compare_rhythm(reference_onsets: np.ndarray, user_onsets: np.ndarray) -> dic
     if len(reference_onsets) == 0 or len(user_onsets) == 0:
         return {
             "average_timing_difference": 0.0,
-            "rhythm_score": 0.0
+            "rhythm_score": 0
         }
         
     # Use Dynamic Time Warping (DTW) to align the onsets
@@ -78,7 +83,7 @@ def compare_rhythm(reference_onsets: np.ndarray, user_onsets: np.ndarray) -> dic
     # 1.0 seconds off = minus 100 points
     # (e.g. 0.1s off = score of 90)
     raw_score = 100 - (average_timing_difference * 100)
-    rhythm_score = float(np.clip(raw_score, 0, 100))
+    rhythm_score = _final_score(float(np.clip(raw_score, 0, 100)))
     
     return {
         "average_timing_difference": average_timing_difference,
@@ -130,7 +135,7 @@ def compare_tempo(reference_bpm: float, user_bpm: float) -> dict:
     # Simple MVP scoring formula:
     # Deduct 5 points for every 1 BPM off
     raw_score = 100 - (tempo_difference * 5)
-    tempo_score = float(np.clip(raw_score, 0, 100))
+    tempo_score = _final_score(float(np.clip(raw_score, 0, 100)))
     
     return {
         "tempo_difference": tempo_difference,

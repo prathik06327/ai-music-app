@@ -8,6 +8,10 @@ from services.pitch_service import extract_pitch
 logger = logging.getLogger(__name__)
 
 
+def _final_score(score: float) -> int:
+    return max(0, min(100, int(round(score))))
+
+
 def _sanitize_pitch_contour(pitch_contour: np.ndarray) -> np.ndarray:
     """
     Removes silent or invalid frames before melody comparison.
@@ -82,7 +86,7 @@ def analyze_melody_similarity(reference_audio_path: str, user_audio_path: str) -
     if reference_pitch.size == 0 or user_pitch.size == 0:
         logger.warning("No voiced pitch frames available for melody analysis.")
         return {
-            "melody_score": 0.0,
+            "melody_score": 0,
             "similarity": 0.0,
         }
 
@@ -91,12 +95,12 @@ def analyze_melody_similarity(reference_audio_path: str, user_audio_path: str) -
 
     logger.info("Computing melody similarity using numpy.corrcoef")
     similarity = _safe_similarity(aligned_reference, aligned_user)
-    melody_score = _correlation_to_score(similarity)
+    melody_score = _final_score(_correlation_to_score(similarity))
 
     logger.info(f"Melody similarity result: {similarity:.4f}")
     logger.info(f"Melody score result: {melody_score:.2f}")
 
     return {
-        "melody_score": float(melody_score),
+        "melody_score": melody_score,
         "similarity": float(similarity),
     }

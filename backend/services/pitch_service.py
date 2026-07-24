@@ -17,6 +17,17 @@ from services.alignment_service import align_pitch_contours
 
 logger = logging.getLogger(__name__)
 
+SAMPLE_RATE = 16000
+HOP_LENGTH = 160
+FMIN = 50.0
+FMAX = 1000.0
+MODEL_CAPACITY = "tiny"
+DEVICE = "cpu"
+
+
+def _final_score(score: float) -> int:
+    return max(0, min(100, int(round(score))))
+
 
 def _ensure_torchcrepe_eval_mode(device: str, model_capacity: str) -> None:
     """
@@ -37,6 +48,41 @@ def _ensure_torchcrepe_eval_mode(device: str, model_capacity: str) -> None:
     # updates, improving repeatability for the same audio input.
     torchcrepe.infer.model.eval()
     logger.info("Model loaded in evaluation mode")
+
+
+def extract_pitch_from_audio(audio_array: np.ndarray, sample_rate: int) -> np.ndarray:
+    """
+    Extracts the fundamental frequency contour from a preloaded audio waveform.
+
+    This helper keeps TorchCREPE inference in one place so callers that already
+    loaded audio do not need to duplicate the loading step.
+
+    Args:
+        audio_array (np.ndarray): Normalized mono waveform.
+        sample_rate (int): Sample rate for the waveform.
+
+    Returns:
+        np.ndarray: A 1D array of pitch values in Hertz.
+    """
+    audio_tensor = torch.tensor(audio_array, dtype=torch.float32).unsqueeze(0)
+
+    try:
+        _ensure_torchcrepe_eval_mode(DEVICE, MODEL_CAPACITY)
+        logger.info("Running TorchCREPE inference from preloaded audio")
+        with torch.no_grad():
+            pitch_tensor = torchcrepe.predict(
+                audio=audio_tensor,
+                sample_rate=sample_rate,
+                hop_length=HOP_LENGTH,
+                fmin=FMIN,
+                fmax=FMAX,
+                model=MODEL_CAPACITY,
+                device=DEVICE,
+            )
+    except Exception as exc:
+        raise RuntimeError(f"TorchCREPE failed to predict pitch: {exc}") from exc
+
+    return pitch_tensor.squeeze(0).detach().numpy()
 
 
 def extract_pitch(audio_path: str) -> np.ndarray:
@@ -64,62 +110,13 @@ def extract_pitch(audio_path: str) -> np.ndarray:
         >>> print(pitches)
         [220.1 221.3 220.7 ...]
     """
-    # Step 1: Load and format the audio
+    # Step 1: Load and format the audio.
     # Our audio_service ensures the file exists, is not empty, is mono, and is 16 kHz.
     try:
         audio_array, sample_rate = load_audio(audio_path)
     except Exception as e:
         raise ValueError(f"Failed to load audio for pitch extraction: {e}") from e
-
-    # Step 2: Convert the NumPy array into a PyTorch tensor
-    # Models running in PyTorch require tensors. We cast it to a standard 32-bit float.
-    audio_tensor = torch.tensor(audio_array, dtype=torch.float32)
-
-    # Step 3: Add a batch dimension
-    # TorchCREPE expects multiple tracks at once (a "batch"). Even though we only 
-    # have one track, we must reshape it from [samples] to [1, samples].
-    audio_tensor = audio_tensor.unsqueeze(0)
-
-    # Step 4: Configure TorchCREPE settings
-    # Hop length: How many audio samples to skip before making the next pitch estimation.
-    # At 16000 Hz, a hop length of 160 means we get 100 pitch estimations per second (10ms steps).
-    hop_length = 160
-    
-    # Minimum and Maximum frequencies: We constrain the model to look for pitches 
-    # strictly between 50 Hz (deep bass) and 1000 Hz (high soprano vocal range).
-    fmin = 50.0
-    fmax = 1000.0
-    
-    # Prediction model: 'full' is highly accurate but slightly slower than 'tiny'.
-    model_capacity = "tiny"
-    device = 'cpu'
-
-    # Step 5: Run Pitch Prediction
-    try:
-        _ensure_torchcrepe_eval_mode(device, model_capacity)
-        logger.info("Running inference with torch.no_grad()")
-        # We instruct TorchCREPE to analyze our tensor frame-by-frame and return the dominant pitches.
-        # no_grad avoids building a training graph during inference, reducing memory
-        # use and helping keep repeated analysis runs more consistent and faster.
-        with torch.no_grad():
-            pitch_tensor = torchcrepe.predict(
-                audio=audio_tensor,
-                sample_rate=sample_rate,
-                hop_length=hop_length,
-                fmin=fmin,
-                fmax=fmax,
-                model=model_capacity,
-                device=device # Run on standard CPU to ensure maximum compatibility
-            )
-    except Exception as e:
-        raise RuntimeError(f"TorchCREPE failed to predict pitch: {e}") from e
-
-    # Step 6: Format the output
-    # Remove PyTorch's computational graph mapping, pull it out of the [1, frames] batch, 
-    # and convert it back into a standard dense 1D NumPy array for easy handling in Python.
-    pitch_values = pitch_tensor.squeeze(0).detach().numpy()
-
-    return pitch_values
+    return extract_pitch_from_audio(audio_array, sample_rate)
 
 
 def compare_pitch_contours(reference_pitch: np.ndarray, user_pitch: np.ndarray) -> dict:
@@ -169,7 +166,7 @@ def compare_pitch_contours(reference_pitch: np.ndarray, user_pitch: np.ndarray) 
     }
 
 
-def calculate_pitch_score(average_pitch_error: float) -> float:
+def calculate_pitch_score(average_pitch_error: float) -> int:
     """
     Calculates a pitch score from the average pitch error.
 
@@ -177,7 +174,7 @@ def calculate_pitch_score(average_pitch_error: float) -> float:
         average_pitch_error (float): The average pitch difference in Hz.
 
     Returns:
-        float: A score between 0 and 100.
+        int: A score between 0 and 100.
     """
     # Temporary MVP scoring algorithm:
     # subtract 1 point for every 5 Hz of average pitch error.
@@ -185,7 +182,7 @@ def calculate_pitch_score(average_pitch_error: float) -> float:
     score = 100 - (average_pitch_error / 5)
 
     # Clamp the score to the expected 0-100 range.
-    return float(np.clip(score, 0, 100))
+    return _final_score(float(np.clip(score, 0, 100)))
 
 
 def plot_pitch_contours(reference_contour: np.ndarray, user_contour: np.ndarray) -> str:

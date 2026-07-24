@@ -122,3 +122,90 @@ export async function generateFeedback(scores: {
 
   return res.json();
 }
+
+export type PitchPoint = {
+  time: number;
+  pitch: number;
+};
+
+export type PitchSummary = {
+  minimum_pitch: number;
+  maximum_pitch: number;
+  average_pitch: number;
+  median_pitch: number;
+  pitch_range: number;
+  minimum_note: string;
+  maximum_note: string;
+  average_note: string;
+};
+
+export type PitchExtremePoint = {
+  time: number;
+  pitch: number;
+  note: string;
+};
+
+export type SustainedRegion = {
+  start_time: number;
+  end_time: number;
+  duration: number;
+  average_pitch: number;
+  note: string;
+};
+
+export type StableRegion = {
+  start_time: number;
+  end_time: number;
+  duration: number;
+  average_pitch: number;
+  note: string;
+  stability: number;
+};
+
+export type PitchTransition = {
+  time: number;
+  from_pitch: number;
+  to_pitch: number;
+  from_note: string;
+  to_note: string;
+  semitone_change: number;
+  direction: "up" | "down";
+};
+
+export type PitchVisualizationResult = {
+  duration: number;
+  sample_rate: number;
+  frame_count: number;
+  pitch_points: PitchPoint[];
+  summary: PitchSummary;
+  highest_pitch_point: PitchExtremePoint;
+  lowest_pitch_point: PitchExtremePoint;
+  sustained_regions: SustainedRegion[];
+  stable_regions: StableRegion[];
+  pitch_transitions: PitchTransition[];
+};
+
+/**
+ * Generates pitch visualization contour and metadata from a vocal audio path.
+ */
+export async function getPitchVisualization(
+  audioPath: string
+): Promise<PitchVisualizationResult> {
+  const res = await fetch(`${API_BASE}/visualize-pitch`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      audio_path: audioPath,
+    }),
+  });
+
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.detail || "Pitch visualization failed");
+  }
+
+  return res.json();
+}
+

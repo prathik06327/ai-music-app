@@ -8,6 +8,10 @@ from services.audio_service import load_audio
 logger = logging.getLogger(__name__)
 
 
+def _final_score(score: float) -> int:
+    return max(0, min(100, int(round(score))))
+
+
 def _feature_stats(feature: np.ndarray) -> list[float]:
     """
     Returns mean and standard deviation for a librosa feature matrix.
@@ -95,7 +99,7 @@ def analyze_harmonic_similarity(reference_audio_path: str, user_audio_path: str)
     user_features = extract_harmonic_features(user_audio_path)
 
     similarity = _cosine_similarity(reference_features, user_features)
-    harmonic_score = float(np.clip(similarity * 100.0, 0.0, 100.0))
+    harmonic_score = _final_score(float(np.clip(similarity * 100.0, 0.0, 100.0)))
 
     logger.info("Feature similarity: %.4f", similarity)
     logger.info("Harmonic score: %.2f", harmonic_score)

@@ -13,6 +13,7 @@ from services.pitch_service import (
     extract_pitch,
     plot_pitch_contours
 )
+from services.pitch_visualization_service import generate_pitch_visualization
 from services.rhythm_service import (
     extract_onsets,
     compare_rhythm,
@@ -60,6 +61,10 @@ class PerformanceAnalysisRequest(BaseModel):
     user_vocals_path: str
 
 
+class PitchVisualizationRequest(BaseModel):
+    audio_path: str
+
+
 class FeedbackGenerationRequest(BaseModel):
     pitch_score: float
     rhythm_score: float
@@ -102,6 +107,10 @@ def _is_same_audio_file(reference_path: Path, user_path: Path) -> bool:
         return _file_sha256(reference_path) == _file_sha256(user_path)
     except OSError:
         return False
+
+
+def _final_score(score: float) -> int:
+    return max(0, min(100, int(round(score))))
 
 
 @app.post("/analyze-pitch")
@@ -160,6 +169,33 @@ def analyze_pitch(request: PitchAnalysisRequest):
     }
 
 
+@app.post("/visualize-pitch")
+def visualize_pitch(request: PitchVisualizationRequest):
+    audio_path = Path(request.audio_path)
+
+    if not audio_path.is_file():
+        logger.error(f"Audio file not found: {audio_path}")
+        raise HTTPException(status_code=400, detail="Audio file was not found.")
+
+    try:
+        logger.info("Generating pitch visualization payload for %s", audio_path)
+        visualization_data = generate_pitch_visualization(audio_path.as_posix())
+    except FileNotFoundError as exc:
+        logger.error(f"File not found during visualization: {exc}")
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        logger.error(f"ValueError during pitch visualization: {exc}")
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        logger.error(f"RuntimeError during pitch visualization: {exc}")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error(f"Unexpected error during pitch visualization: {exc}")
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {exc}") from exc
+
+    return visualization_data
+
+
 @app.post("/analyze-timbre")
 def analyze_timbre(request: TimbreAnalysisRequest):
     reference_path = Path(request.reference_vocals_path)
@@ -198,7 +234,7 @@ def analyze_timbre(request: TimbreAnalysisRequest):
         raise HTTPException(status_code=500, detail=f"Unexpected error: {exc}") from exc
 
     return {
-        "timbre_score": float(timbre_score),
+        "timbre_score": timbre_score,
         "similarity": float(similarity)
     }
 
@@ -214,7 +250,7 @@ def calculate_overall_score(
     pronunciation_score: float | None = None,
     range_score: float | None = None,
     harmonic_score: float | None = None,
-) -> float:
+) -> int:
     """
     Calculates the overall performance score using a weighted system.
 
@@ -266,8 +302,8 @@ def calculate_overall_score(
         overall_score += contribution
         logger.info("%s contribution: %.4f", name.title(), contribution)
 
-    overall_score = round(max(0.0, min(100.0, overall_score)), 2)
-    logger.info("Final overall score (clamped & rounded): %.2f", overall_score)
+    overall_score = _final_score(overall_score)
+    logger.info("Final overall score (clamped & rounded): %d", overall_score)
 
     return overall_score
 
@@ -401,17 +437,17 @@ def analyze_performance(request: PerformanceAnalysisRequest):
         raise HTTPException(status_code=500, detail=f"Unexpected error: {exc}") from exc
 
     response_payload = {
-        "pitch_score": float(pitch_score),
-        "rhythm_score": float(rhythm_score),
-        "tempo_score": float(tempo_score),
-        "timbre_score": float(timbre_score),
-        "melody_score": float(melody_score),
-        "dynamics_score": float(dynamics_score),
-        "stability_score": float(stability_score),
-        "pronunciation_score": float(pronunciation_score),
-        "range_score": float(range_score),
-        "harmonic_score": float(harmonic_score),
-        "overall_score": float(overall_score)
+        "pitch_score": pitch_score,
+        "rhythm_score": rhythm_score,
+        "tempo_score": tempo_score,
+        "timbre_score": timbre_score,
+        "melody_score": melody_score,
+        "dynamics_score": dynamics_score,
+        "stability_score": stability_score,
+        "pronunciation_score": pronunciation_score,
+        "range_score": range_score,
+        "harmonic_score": harmonic_score,
+        "overall_score": overall_score
     }
     logger.info(f"Analysis response payload: {response_payload}")
     return response_payload

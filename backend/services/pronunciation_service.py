@@ -45,7 +45,13 @@ def _transcribe_audio(audio_path: str) -> str:
 
     logger.info("Transcribing audio for pronunciation analysis: %s", audio_path)
     model = _get_whisper_model()
-    result = model.transcribe(path.as_posix(), fp16=False)
+    logger.info("Running deterministic Whisper transcription")
+    result = model.transcribe(
+        path.as_posix(),
+        fp16=False,
+        temperature=0.0,
+        condition_on_previous_text=False,
+    )
     transcript = _normalize_transcript(result.get("text", ""))
 
     if transcript:
@@ -76,6 +82,10 @@ def _score_transcripts(reference_text: str, user_text: str) -> float:
     return max(0.0, min(100.0, score))
 
 
+def _final_score(score: float) -> int:
+    return max(0, min(100, int(round(score))))
+
+
 def analyze_pronunciation_accuracy(reference_audio_path: str, user_audio_path: str) -> dict:
     """
     Measures lyrical pronunciation similarity between reference and user vocals.
@@ -95,12 +105,12 @@ def analyze_pronunciation_accuracy(reference_audio_path: str, user_audio_path: s
             len(user_text.split()),
         )
 
-    pronunciation_score = _score_transcripts(reference_text, user_text)
+    pronunciation_score = _final_score(_score_transcripts(reference_text, user_text))
 
     logger.info("Pronunciation score: %.2f", pronunciation_score)
 
     return {
-        "pronunciation_score": float(pronunciation_score),
+        "pronunciation_score": pronunciation_score,
         "reference_text": reference_text,
         "user_text": user_text,
     }

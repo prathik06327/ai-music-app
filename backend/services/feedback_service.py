@@ -24,7 +24,7 @@ def _build_prompt(
     return (
         "You are a professional vocal coach.\n"
         "Write feedback in plain text only, no markdown.\n"
-        "Keep the response to about 150 words.\n\n"
+        "Keep the response to about 300 words.\n\n"
         "Performance scores (0-100):\n"
         f"- Overall: {overall_score:.2f}\n"
         f"- Pitch: {pitch_score:.2f}\n"

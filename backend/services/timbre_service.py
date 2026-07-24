@@ -1,6 +1,7 @@
 import laion_clap
 import logging
 import numpy as np
+import random
 import torch
 
 logger = logging.getLogger(__name__)
@@ -90,6 +91,11 @@ def extract_audio_embedding(audio_path: str) -> np.ndarray:
     # 2. Extract embedding using the filelist method
     # It returns a 2D array of embeddings, shape: (1, embedding_dim)
     try:
+        logger.info("Generating deterministic CLAP embedding")
+        random.seed(0)
+        np.random.seed(0)
+        torch.manual_seed(0)
+
         logger.info("Running inference with torch.no_grad()")
         # no_grad avoids building an autograd graph during inference, which reduces
         # memory use, improves performance, and removes another source of variability.

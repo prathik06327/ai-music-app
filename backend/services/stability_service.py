@@ -6,6 +6,10 @@ from services.pitch_service import extract_pitch
 logger = logging.getLogger(__name__)
 
 
+def _final_score(score: float) -> int:
+    return max(0, min(100, int(round(score))))
+
+
 def _sanitize_pitch(pitch_contour: np.ndarray) -> np.ndarray:
     """
     Removes zero and NaN values to only analyze valid pitched frames.
@@ -61,7 +65,7 @@ def analyze_vocal_stability(reference_audio_path: str, user_audio_path: str) -> 
     else:
         score = (min(ref_var, user_var) / max(ref_var, user_var)) * 100.0
 
-    score = float(np.clip(score, 0.0, 100.0))
+    score = _final_score(float(np.clip(score, 0.0, 100.0)))
 
     logger.info(f"Reference variance: {ref_var:.4f}")
     logger.info(f"User variance: {user_var:.4f}")

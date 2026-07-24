@@ -9,6 +9,10 @@ from services.audio_service import load_audio
 logger = logging.getLogger(__name__)
 
 
+def _final_score(score: float) -> int:
+    return max(0, min(100, int(round(score))))
+
+
 def _extract_rms_curve(audio_path: str) -> np.ndarray:
     """
     Loads audio and extracts its RMS energy contour.
@@ -75,7 +79,7 @@ def analyze_dynamics(reference_audio_path: str, user_audio_path: str) -> dict:
     if reference_rms.size == 0 or user_rms.size == 0:
         logger.warning("No valid RMS frames available for dynamics analysis.")
         return {
-            "dynamics_score": 0.0,
+            "dynamics_score": 0,
             "similarity": 0.0,
         }
 
@@ -84,12 +88,12 @@ def analyze_dynamics(reference_audio_path: str, user_audio_path: str) -> dict:
 
     logger.info("Computing cosine similarity for aligned RMS curves")
     similarity = _cosine_similarity(aligned_reference, aligned_user)
-    dynamics_score = _similarity_to_score(similarity)
+    dynamics_score = _final_score(_similarity_to_score(similarity))
 
     logger.info(f"Dynamics similarity result: {similarity:.4f}")
     logger.info(f"Dynamics score result: {dynamics_score:.2f}")
 
     return {
-        "dynamics_score": float(dynamics_score),
+        "dynamics_score": dynamics_score,
         "similarity": float(similarity),
     }
